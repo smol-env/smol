@@ -5,7 +5,9 @@ while(fwrite(STDOUT,"> ")&&($s=fgets(STDIN))!==false){
  $x[]=["role"=>"user","content"=>rtrim($s,"\r\n")];
  while(1){
   $b=json_encode(["model"=>"gpt-5.6-sol","input"=>$x,"tools"=>[["type"=>"custom","name"=>"sh"]]]);
-  $r=json_decode(file_get_contents($u,0,stream_context_create(["http"=>["method"=>"POST","header"=>"Content-Type: application/json\r\nsession_id: $k","content"=>$b]])),1);$o=$r["output"];array_push($x,...$o);$c=0;
+  $r=json_decode(file_get_contents($u,0,stream_context_create(["http"=>[
+   "method"=>"POST","header"=>"Content-Type: application/json\r\nsession_id: $k","content"=>$b
+  ]])),1);$o=$r["output"];array_push($x,...$o);$c=0;
   foreach($o as $i)if($i["type"]=="custom_tool_call"){
    $c=1;$q=[];exec("/bin/sh -c ".escapeshellarg($i["input"])." 2>&1",$q,$n);
    $x[]=["type"=>"custom_tool_call_output","call_id"=>$i["call_id"],"output"=>"exit $n\n".implode("\n",$q)];
