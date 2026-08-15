@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 url = sys.argv[1]
 history = []
 headers = {"Content-Type": "application/json", "session_id": uuid.uuid4().hex}
-brief_prompt = "Checkpoint handoff: preserve goals, constraints, progress, decisions, next steps, critical values verbatim; omit noise."
+brief_prompt = "Handoff brief: goals, constraints, progress, decisions, next steps, exact values; omit noise. Return text, not a tool call."
 
 def post(body):
     for attempt in range(3):
@@ -40,12 +40,17 @@ while prompt := input("> "):
         calls = [item for item in output if item["type"] == "function_call"]
         if calls:
             history += [dict(type="function_call_output", call_id=c["call_id"], output=shell(**json.loads(c["arguments"]))) for c in calls]
-            continue
+        else:
+            messages = [item["content"][0]["text"] for item in output if item["type"] == "message"]
+            print(messages[-1])
 
-        messages = [item["content"][0]["text"] for item in output if item["type"] == "message"]
-        print(messages[-1])
-        if response["usage"]["total_tokens"] > 255_616:
-            compacted = post(dict(body, input=history + [{"role": "developer", "content": brief_prompt}]))
+        if response["usage"]["total_tokens"] > 244_800:
+            brief = history + [{"role": "user", "content": brief_prompt}]
+            compacted = post(dict(body, input=brief, tool_choice="none"))
+            if any(item["type"] == "function_call" for item in compacted["output"]):
+                compacted = post(dict(body, input=brief, tools=[]))
             messages = [item["content"][0]["text"] for item in compacted["output"] if item["type"] == "message"]
-            history[:] = [{"role": "user", "content": "Briefing:\n" + messages[-1]}]
+            history[:] = [{"role": "user", "content": "Briefing:\n" + messages[-1] + ("\nContinue." if calls else "")}]
+
+        if calls: continue
         break
