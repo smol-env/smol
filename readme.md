@@ -16,46 +16,22 @@ smol is fewer dependencies
 
 smol is easy to adapt
 
+smol is easy to build upon
+
 ## Python
 
-```python
-import json,sys;from subprocess import getoutput;from urllib.request import Request,urlopen;from uuid import uuid4
-url=sys.argv[1];h=[];H={"Content-Type":"application/json","session_id":uuid4().hex};b=dict(model="gpt-5.6-sol",input=h,tools=[dict(type="custom",name="sh")])
-while True:
-  if not(p:=input("> ")).strip():continue
-  h+=[dict(role="user",content=p)]
-  while True:
-    r=json.load(urlopen(Request(url,json.dumps(b).encode(),H)));o=r["output"];h+=o;c=[i for i in o if i["type"]=="custom_tool_call"]
-    if not c:print(o[-1]["content"][0]["text"],f'\n[{r["usage"]["total_tokens"]/10500:05.2f}%]');break
-    h+=[dict(type="custom_tool_call_output",call_id=i["call_id"],output=getoutput(i["input"])) for i in c]
-```
+[`smol.py`](smol.py) includes retries, context compaction, and shell output truncation.
 
-## Go
+## Golf
 
-```go
-package main
-import("bufio";"bytes";"crypto/rand";"encoding/json";"fmt";"net/http";"os";"os/exec")
-type M=map[string]any
-func main(){
- u:=os.Args[1];k:=rand.Text();h:=[]any{};s:=bufio.NewScanner(os.Stdin)
- for fmt.Print("> ");s.Scan();fmt.Print("> "){
-  if len(bytes.TrimSpace(s.Bytes()))<1{continue}
-  h=append(h,M{"role":"user","content":s.Text()})
-  for{
-   b,_:=json.Marshal(M{"model":"gpt-5.6-sol","input":h,"tools":[]M{{"type":"custom","name":"sh"}}})
-   q,_:=http.NewRequest("POST",u,bytes.NewReader(b));q.Header=http.Header{"Content-Type":{"application/json"},"session_id":{k}};r,_:=http.DefaultClient.Do(q);x:=M{}
-   json.NewDecoder(r.Body).Decode(&x);r.Body.Close();o:=x["output"].([]any);h=append(h,o...);c:=false
-   for _,v:=range o{m:=v.(M);if m["type"]=="custom_tool_call"{
-    c=true;p:=exec.Command("/bin/sh","-c",m["input"].(string));q,_:=p.CombinedOutput();n:=p.ProcessState.ExitCode()
-    h=append(h,M{"type":"custom_tool_call_output","call_id":m["call_id"],"output":fmt.Sprintf("exit %d\n%s",n,q)})
-   }}
-   if !c{fmt.Printf("%s\n[%05.2f%%]\n",o[len(o)-1].(M)["content"].([]any)[0].(M)["text"],x["usage"].(M)["total_tokens"].(float64)/10500);break}
-  }
- }
-}
-```
+smol implementations with the essential agent loop, user input, and context window usage
 
-(more implementations coming soon!)
+without retries, compaction, or shell output truncation:
+
+- [Python](golf/smol.py)
+- [Go](golf/smol.go)
+- [Clojure](golf/smol.clj)
+- [PHP](golf/smol.php)
 
 ## Run
 
@@ -64,12 +40,12 @@ Pass URL of an endpoint that is compatible with the OpenAI Responses API
 ```sh
 python3 smol.py http://127.0.0.1:8787/v1/responses
 
-# or
-go run smol.go http://127.0.0.1:8787/v1/responses
+# golfed Go
+go run golf/smol.go http://127.0.0.1:8787/v1/responses
 ```
 
 - enter prompt at `>`
-- empty input gets ignored
+- empty input exits the Python implementation
 - ctrl+d exits
 - model requested commands get executed directly via `sh` (!)
 
@@ -79,7 +55,7 @@ Optional quality of life: rlwrap for line editing and persistent history
 rlwrap -H ~/.smol_history python3 smol.py http://127.0.0.1:8787/v1/responses
 
 # or
-rlwrap -H ~/.smol_history go run smol.go http://127.0.0.1:8787/v1/responses
+rlwrap -H ~/.smol_history go run golf/smol.go http://127.0.0.1:8787/v1/responses
 ```
 
 `smol` does not add credentials to requests.
@@ -88,48 +64,63 @@ Run `smol` in an appropriate environment that has access to an API endpoint `smo
 
 e.g. you can run a small proxy that handles your API key or ChatGPT/Codex session and forwards the requests
 
-## FAQ
+## Questions
 
-Paste the `smol` implementation into your favorite agent and ask away.
+Paste this into ChatGPT, Claude, Codex, Pi, or your favorite agent:
 
-> this is `smol`, a minimal agent implementation.
+> Read the code of smol.py and answer all questions from the README:
+> https://github.com/smol-env/smol
 
-Here are some prompts to get you going.
+### Understand
 
-> What does smol do from a high level point of view?
+> What does smol do?
 
-> What makes this interesting?
+> Why is less code useful?
 
-> What is the advantage of a minimal agent like `smol` that has no 3rd party dependencies?
-> How does this compare to Pi, OpenCode, Codex, Hermes, Claude Code?
+> Why have no system prompt?
 
-> Why is it a bit counter-intuitive but actually a good idea that `smol` by default has no system prompt and only one tool?
+> Why have only one tool?
+
 > Why is the context window precious?
-> Compare the system prompts and other context injections of Pi, OpenCode, Codex, Hermes, Claude Code to what `smol` does.
 
-> Why does it make sense to outsource access rights, credentials, available tools and so on to the env instead of handling it in the agent process?
+> Why truncate shell output? Why in this way?
 
-> Compare `smol` with Pi, OpenCode, Codex, Hermes, Claude Code and highlight key pros and cons.
-> Audit the code of all of them and tell me how confident you are that you found all potential issues of `smol` vs the other agent implementations?
+> Why does compaction keep history as a stable prefix? How does this affect caching and cost?
 
-> I would like to run `smol` in its own environment (e.g. an ubuntu 26.04 docker image) in a way that `smol` does not need access to the OpenAI credentials
-> Can you help me create a minimal standard-library-only proxy that handles my OpenAI API or a ChatGPT/Codex session key and is outside of the agent environemt?
-> Walk me through this step by step so I can understand the why and how and trade-offs.
+> What assumptions and failure modes does smol have?
 
-> Set up a virtual environment to benchmark `smol` using GPT 5.6 Sol medium compared to other harnesses like Pi, OpenCode, Codex, Hermes, Claude Code.
-> Use an ubuntu 26.04 server image, give the vm test environment access to an endpoint that proxies to an OpenAI Responses compatible endpoint.
-> Use the proxy to log traces of requests and responses so we can later analyze tokens usage, token caching, number of requests, number of tool calls
-> as well as system prompts, context that was injected and helps us better understand what happened.
-> I'm also interested in wall clock time and a hand-ful of agentic tasks so I can compare the harnesses in a fair way.
-> Let's discuss what kind of tasks we want to bench and how we can grade them.
-> Let's discuss how many runs each harness should do per task so we are confident about the results.
-> Let's do this step by step so we don't waste a lot of tokens for harness bench runs before we are confident the setup works and is fair for each harness.
-> Come up with an easy to use review ui that has summary tables across various dimensions but also ability to drill down and view every trace
-> and easily compare traces of runs side by side. We can do all of this without any npm packages. HTML and Vanilla JS is good. Python and Go are good. Stdlib is good.
+> Why leave credentials and permissions to the environment?
 
-> Explain `smol.py` and `smol.go` line by line, compare them, and highlight all potential problems you can identify.
-> How can we make it more robust while keeping it simple?
+> Explain this implementation line by line.
 
-> Give me a few feature ideas that we could add to `smol.py` or `smol.go` while staying with the existing philosophy of minimalism and stdlib-only.
+### Compare
 
-Requires Python 3.8+ or Go 1.24+.
+> Compare smol with Pi, OpenCode, Codex, Hermes, and Claude Code by:
+>
+> - code size
+> - third-party dependencies
+> - runtime performance (time, tokens, RAM, CPU, tool use, requests, …)
+> - cost per task
+>
+> How can we compare them fairly?
+
+> How can we compare agent traces and VM resource usage quantitatively and qualitatively?
+
+### Build
+
+> What kind of apps could we build on top of smol?
+
+> How can we use a different model with smol?
+
+> How could we improve the terminal UI/UX with just a few changes?
+
+> How could we add a minimal web UI instead of a terminal UI?
+
+> How could we add a second tool without introducing a framework?
+
+> How could we add session save and replay using the standard library?
+
+> How could we build a minimal standard-library-only proxy that keeps API credentials outside smol?
+
+> Port smol to another language while keeping it smol.
+> Use only the standard library or minimal dependencies when necessary.
